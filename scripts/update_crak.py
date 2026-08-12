@@ -1,63 +1,116 @@
 import json
 import os
+import re
 import datetime
 import requests
 from bs4 import BeautifulSoup
 
-URL = "https://www.vaneck.com/us/en/investments/oil-refiners-etf-crak/"
+URL = "https://www.vaneck.com/us/en/investments/oil-refiners-etf-crak/overview/"
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data", "holdings.json")
 
 os.makedirs(os.path.dirname(DATA), exist_ok=True)
 
 HEADERS = {
-"User-Agent": "Mozilla/5.0 (CRAK-Tracker)"
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/139.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;"
+        "q=0.9,image/avif,image/webp,*/*;q=0.8"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
-response = requests.get(URL, headers=HEADERS, timeout=30)
+
+def clean_text(value):
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def number_from_text(value):
+    if value is None:
+        return None
+
+    text = clean_text(value)
+    text = text.replace("$", "")
+    text = text.replace(",", "")
+    text = text.replace("%", "")
+
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+print("Downloading CRAK holdings from VanEck...")
+
+response = requests.get(
+    URL,
+    headers=HEADERS,
+    timeout=30,
+)
+
 response.raise_for_status()
+
+print(f"Downloaded {len(response.text):,} bytes.")
 
 soup = BeautifulSoup(response.text, "html.parser")
 
 holdings = []
 
-# Find the VanEck holdings table.
+print("Searching for the CRAK holdings table...")
+
 for table in soup.find_all("table"):
+
     rows = table.find_all("tr")
+
     if not rows:
-        continue
+    continue
 
     header_cells = rows[0].find_all(["th", "td"])
+
     headers = [
-        cell.get_text(" ", strip=True).lower()
+        clean_text(cell.get_text(" ", strip=True)).lower()
         for cell in header_cells
     ]
 
-    # We are looking specifically for the CRAK holdings table.
-    if not any("ticker" in h for h in headers):
+    header_text = " ".join(headers)
+
+    print("Found table:", header_text[:200])
+
+    # We need the actual CRAK holdings table.
+    if "ticker" not in header_text:
         continue
 
-    if not any("holding name" in h for h in headers):
+    if "holding name" not in header_text:
         continue
 
+    # Find the relevant columns.
     ticker_index = next(
-        (i for i, h in enumerate(headers) if "ticker" in h),
-        None
+        (
+            i for i, h in enumerate(headers)
+            if h == "ticker" or "ticker" in h
+        ),
+        None,
     )
 
     name_index = next(
-        (i for i, h in enumerate(headers) if "holding name" in h),
-        None
+        (
+            i for i, h in enumerate(headers)
+            if "holding name" in h
+        ),
+        None,
     )
 
     weight_index = next(
         (
             i for i, h in enumerate(headers)
             if "% of net assets" in h
-            or "% of net" in h
-            or "weight" in h
         ),
-        None
+        None,
     )
 
     market_value_index = next(
@@ -65,24 +118,25 @@ for table in soup.find_all("table"):
             i for i, h in enumerate(headers)
             if "market value" in h
         ),
-        None
+        None,
     )
 
     if ticker_index is None or name_index is None:
         continue
 
     for row in rows[1:]:
+
         cells = row.find_all(["td", "th"])
 
         if len(cells) <= max(ticker_index, name_index):
             continue
 
-        ticker = cells[ticker_index].get_text(
-            " ", strip=True
+        ticker = clean_text(
+            cells[ticker_index].get_text(" ", strip=True)
         )
 
-        name = cells[name_index].get_text(
-            " ", strip=True
+        name = clean_text(
+            cells[name_index].get_text(" ", strip=True)
         )
 
         if not ticker or not name:
@@ -90,59 +144,44 @@ for table in soup.find_all("table"):
 
         holding = {
             "ticker": ticker,
-            "name": name
+            "name": name,
         }
 
-        if weight_index is not None and len(cells) > weight_index:
+        if (
+            weight_index is not None
+            and len(cells) > weight_index
+        ):
             weight_text = cells[weight_index].get_text(
                 " ", strip=True
             )
 
-            weight_text = (
-                weight_text
-                .replace("%", "")
-                .replace(",", "")
-                .strip()
-            )
-
-            try:
-                holding["weight"] = float(weight_text)
-            except ValueError:
-                holding["weight"] = None
+            holding["weight"] = number_from_text(weight_text)
 
         if (
             market_value_index is not None
             and len(cells) > market_value_index
         ):
-            market_value_text = cells[
-                market_value_index
-            ].get_text(" ", strip=True)
-
-            market_value_text = (
-                market_value_text
-                .replace("$", "")
-                .replace(",", "")
-                .strip()
+            market_text = cells[market_value_index].get_text(
+                " ", strip=True
             )
 
-            try:
-                holding["market_value"] = float(
-                    market_value_text
-                )
-            except ValueError:
-                holding["market_value"] = None
+            holding["market_value"] = number_from_text(
+                market_text
+            )
 
         holdings.append(holding)
 
     if holdings:
         break
 
+
 if not holdings:
     raise RuntimeError(
         "Could not find CRAK holdings table on the VanEck page."
     )
 
-# Remove duplicate tickers while preserving the first occurrence.
+
+# Remove duplicate tickers while preserving order.
 unique = {}
 
 for holding in holdings:
@@ -153,18 +192,23 @@ for holding in holdings:
 
 holdings = list(unique.values())
 
+
 today = datetime.date.today().isoformat()
 
 result = {
     "ticker": "CRAK",
     "date": today,
     "source": URL,
-    "holdings": holdings
+    "holdings": holdings,
 }
+
 
 with open(DATA, "w", encoding="utf-8") as f:
     json.dump(result, f, indent=2)
 
+
 print(
     f"Updated CRAK holdings: {len(holdings)} holdings"
 )
+
+print(f"Saved to: {DATA}")
