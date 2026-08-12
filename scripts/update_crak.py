@@ -61,51 +61,18 @@ soup = BeautifulSoup(response.text, "html.parser")
 
 holdings = []
 
-print("Searching for the CRAK holdings table...")
+for table in soup.find_all("table"):
+    headers = [clean_text(x.get_text(" ", strip=True)).lower() for x in table.find_all("th")]
 
-tables = soup.find_all("table")
-
-for table in tables:
-    rows = table.find_all("tr")
-    if not rows:
+    if not headers or "ticker" not in headers or "holding name" not in headers:
         continue
 
-    headers = [
-        clean_text(cell.get_text(" ", strip=True)).lower()
-        for cell in rows[0].find_all(["th", "td"])
-    ]
+    ticker_index = headers.index("ticker")
+    name_index = headers.index("holding name")
+    weight_index = next((i for i, h in enumerate(headers) if "% of net assets" in h), None)
+    market_value_index = next((i for i, h in enumerate(headers) if "market value" in h), None)
 
-    header_text = " ".join(headers)
-
-    if "ticker" not in header_text or "holding name" not in header_text:
-        continue
-
-    print("Found holdings table:", header_text[:200])
-
-    ticker_index = next(
-        (i for i, h in enumerate(headers) if "ticker" in h),
-        None,
-    )
-
-    name_index = next(
-        (i for i, h in enumerate(headers) if "holding name" in h),
-        None,
-    )
-
-    weight_index = next(
-        (i for i, h in enumerate(headers) if "% of net assets" in h),
-        None,
-    )
-
-    market_value_index = next(
-        (i for i, h in enumerate(headers) if "market value" in h),
-        None,
-    )
-
-    if ticker_index is None or name_index is None:
-        continue
-
-    for row in rows[1:]:
+    for row in table.find_all("tr")[1:]:
         cells = row.find_all(["td", "th"])
 
         if len(cells) <= max(ticker_index, name_index):
@@ -122,24 +89,14 @@ for table in tables:
             "name": name,
         }
 
-        if (
-            weight_index is not None
-            and len(cells) > weight_index
-        ):
-            weight_text = cells[weight_index].get_text(
-                " ", strip=True
+        if weight_index is not None and len(cells) > weight_index:
+            holding["weight"] = number_from_text(
+                cells[weight_index].get_text(" ", strip=True)
             )
-            holding["weight"] = number_from_text(weight_text)
 
-        if (
-            market_value_index is not None
-            and len(cells) > market_value_index
-        ):
-            market_text = cells[market_value_index].get_text(
-                " ", strip=True
-            )
+        if market_value_index is not None and len(cells) > market_value_index:
             holding["market_value"] = number_from_text(
-                market_text
+                cells[market_value_index].get_text(" ", strip=True)
             )
 
         holdings.append(holding)
@@ -148,9 +105,7 @@ for table in tables:
         break
 
 if not holdings:
-    raise RuntimeError(
-        "Could not find CRAK holdings table on the VanEck page."
-    )
+    raise RuntimeError("Could not find CRAK holdings table on the VanEck page.")
 
 # Remove duplicate tickers while preserving order.
 unique = {}
@@ -162,13 +117,6 @@ for holding in holdings:
         unique[ticker] = holding
 
 holdings = list(unique.values())
-
-today = datetime.date.today().isoformat()
-
-result = {
-    "ticker": "CRAK",
-    "date": today,
-    "holdings": holdings,
 }
 
 with open(DATA, "w", encoding="utf-8") as f:
