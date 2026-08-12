@@ -64,57 +64,39 @@ holdings = []
 print("Searching for the CRAK holdings table...")
 
 for table in soup.find_all("table"):
-
     rows = table.find_all("tr")
-
     if not rows:
         continue
 
     header_cells = rows[0].find_all(["th", "td"])
-
     headers = [
         clean_text(cell.get_text(" ", strip=True)).lower()
         for cell in header_cells
     ]
 
     header_text = " ".join(headers)
-
     print("Found table:", header_text[:200])
 
-    # Look for CRAK holdings table
-    if "ticker" not in header_text or "holding" not in header_text:
+    if "ticker" not in header_text or "holding name" not in header_text:
         continue
 
-    # Find the relevant columns.
     ticker_index = next(
-        (
-            i for i, h in enumerate(headers)
-            if h == "ticker" or "ticker" in h
-        ),
+        (i for i, h in enumerate(headers) if "ticker" in h),
         None,
     )
 
     name_index = next(
-        (
-            i for i, h in enumerate(headers)
-            if "holding name" in h
-        ),
+        (i for i, h in enumerate(headers) if "holding name" in h),
         None,
     )
 
     weight_index = next(
-        (
-            i for i, h in enumerate(headers)
-            if "% of net assets" in h
-        ),
+        (i for i, h in enumerate(headers) if "% of net assets" in h),
         None,
     )
 
     market_value_index = next(
-        (
-            i for i, h in enumerate(headers)
-            if "market value" in h
-        ),
+        (i for i, h in enumerate(headers) if "market value" in h),
         None,
     )
 
@@ -122,7 +104,6 @@ for table in soup.find_all("table"):
         continue
 
     for row in rows[1:]:
-
         cells = row.find_all(["td", "th"])
 
         if len(cells) <= max(ticker_index, name_index):
@@ -151,7 +132,6 @@ for table in soup.find_all("table"):
             weight_text = cells[weight_index].get_text(
                 " ", strip=True
             )
-
             holding["weight"] = number_from_text(weight_text)
 
         if (
@@ -161,7 +141,6 @@ for table in soup.find_all("table"):
             market_text = cells[market_value_index].get_text(
                 " ", strip=True
             )
-
             holding["market_value"] = number_from_text(
                 market_text
             )
@@ -170,7 +149,6 @@ for table in soup.find_all("table"):
 
     if holdings:
         break
-
 
 if not holdings:
     raise RuntimeError(
