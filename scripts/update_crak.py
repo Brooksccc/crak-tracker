@@ -5,7 +5,7 @@ import datetime
 import requests
 from bs4 import BeautifulSoup
 
-URL = "https://www.vaneck.com/us/en/investments/oil-refiners-etf-crak/"
+URL = "https://www.vaneck.com/us/en/investments/oil-refiners-etf-crak/performance/"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data", "holdings.json")
