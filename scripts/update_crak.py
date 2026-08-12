@@ -62,7 +62,10 @@ soup = BeautifulSoup(response.text, "html.parser")
 holdings = []
 
 for table in soup.find_all("table"):
-    headers = [clean_text(x.get_text(" ", strip=True)).lower() for x in table.find_all("th")]
+    headers = [
+        clean_text(x.get_text(" ", strip=True)).lower()
+        for x in table.find_all(["th", "td"])
+    ]
 
     if not headers or "ticker" not in headers or "holding name" not in headers:
         continue
