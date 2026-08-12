@@ -61,54 +61,78 @@ soup = BeautifulSoup(response.text, "html.parser")
 
 holdings = []
 
-for table in soup.find_all("table"):
-    headers = [
-        clean_text(x.get_text(" ", strip=True)).lower()
-        for x in table.find_all(["th", "td"])
-    ]
+lines = [
+    clean_text(line)
+    for line in soup.get_text("\n", strip=True).splitlines()
+    if clean_text(line)
+]
 
-    if not headers or "ticker" not in headers or "holding name" not in headers:
-        continue
+start = None
 
-    ticker_index = headers.index("ticker")
-    name_index = headers.index("holding name")
-    weight_index = next((i for i, h in enumerate(headers) if "% of net assets" in h), None)
-    market_value_index = next((i for i, h in enumerate(headers) if "market value" in h), None)
-
-    for row in table.find_all("tr")[1:]:
-        cells = row.find_all(["td", "th"])
-
-        if len(cells) <= max(ticker_index, name_index):
-            continue
-
-        ticker = clean_text(cells[ticker_index].get_text(" ", strip=True))
-        name = clean_text(cells[name_index].get_text(" ", strip=True))
-
-        if not ticker or not name:
-            continue
-
-        holding = {
-            "ticker": ticker,
-            "name": name,
-        }
-
-        if weight_index is not None and len(cells) > weight_index:
-            holding["weight"] = number_from_text(
-                cells[weight_index].get_text(" ", strip=True)
-            )
-
-        if market_value_index is not None and len(cells) > market_value_index:
-            holding["market_value"] = number_from_text(
-                cells[market_value_index].get_text(" ", strip=True)
-            )
-
-        holdings.append(holding)
-
-    if holdings:
+for i in range(len(lines) - 3):
+    headers = [x.lower() for x in lines[i:i + 4]]
+    if headers == [
+        "ticker",
+        "holding name",
+        "% of net assets",
+        "market value (us$)",
+    ]:
+        start = i + 4
         break
 
+if start is None:
+    raise RuntimeError("Could not find CRAK holdings section on the VanEck page.")
+
+row_pattern = re.compile(
+    r"^(?P<ticker>[A-Z0-9][A-Z0-9-]*(?:\s+[A-Z]{2,3})?|-[A-Z]+ [A-Z]+-|--)\s+"
+    r"(?P<name>.*?)\s+"
+    r"(?P<weight>-?\d+(?:\.\d+)?)\s+"
+    r"(?P<value>-?\d[\d,]*)$"
+)
+
+i = start
+
+while i < len(lines):
+    if lines[i].lower().startswith(
+        ("scroll for more information", "these are not recommendations")
+    ):
+        break
+
+    match = row_pattern.match(lines[i])
+
+    if match:
+        holding = {
+            "ticker": match.group("ticker"),
+            "name": match.group("name"),
+            "weight": number_from_text(match.group("weight")),
+            "market_value": number_from_text(match.group("value")),
+        }
+        holdings.append(holding)
+        i += 1
+        continue
+
+    if i + 3 < len(lines):
+        weight = lines[i + 2].replace(",", "")
+        value = lines[i + 3].replace(",", "")
+
+        if (
+            re.fullmatch(r"-?\d+(?:\.\d+)?", weight)
+            and re.fullmatch(r"-?\d+(?:\.\d+)?", value)
+        ):
+            holding = {
+                "ticker": lines[i],
+                "name": lines[i + 1],
+                "weight": number_from_text(weight),
+                "market_value": number_from_text(value),
+            }
+            holdings.append(holding)
+            i += 4
+            continue
+
+    i += 1
+
 if not holdings:
-    raise RuntimeError("Could not find CRAK holdings table on the VanEck page.")
+    raise RuntimeError("Could not parse CRAK holdings from the VanEck page.")
 
 # Remove duplicate tickers while preserving order.
 unique = {}
