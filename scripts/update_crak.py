@@ -4,6 +4,10 @@ import re
 import datetime
 import requests
 from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 URL = "https://www.vaneck.com/us/en/investments/oil-refiners-etf-crak/"
 
@@ -47,17 +51,41 @@ def number_from_text(value):
 
 print("Downloading CRAK holdings from VanEck...")
 
-response = requests.get(
-    URL,
-    headers=HEADERS,
-    timeout=30,
-)
+# Use Selenium to handle JavaScript-rendered content
+options = webdriver.ChromeOptions()
+options.add_argument("--headless")
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-gpu")
 
-response.raise_for_status()
+driver = webdriver.Chrome(options=options)
 
-print(f"Downloaded {len(response.text):,} bytes.")
+try:
+    driver.get(URL)
+    
+    # Wait for and dismiss the modal dialog by clicking "I agree"
+    wait = WebDriverWait(driver, 10)
+    try:
+        agree_button = wait.until(
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'I agree')]"))
+        )
+        agree_button.click()
+        print("Dismissed modal dialog")
+    except:
+        print("No modal dialog found or already dismissed")
+    
+    # Wait for holdings table to load
+    wait.until(
+        EC.presence_of_all_elements_located((By.TAG_NAME, "table"))
+    )
+    
+    html = driver.page_source
+finally:
+    driver.quit()
 
-soup = BeautifulSoup(response.text, "html.parser")
+print(f"Downloaded {len(html):,} bytes.")
+
+soup = BeautifulSoup(html, "html.parser")
 
 holdings = []
 
