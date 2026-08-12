@@ -66,6 +66,13 @@ lines = [
     for line in soup.get_text("\n", strip=True).splitlines()
     if clean_text(line)
 ]
+print("Searching for holdings headers...")
+for i in range(len(lines) - 3):
+    headers = [x.lower() for x in lines[i:i + 4]]
+    print(f"Candidate headers at line {i}: {headers}")
+    if headers == [...]:
+        start = i + 4
+        break
 
 start = None
 
