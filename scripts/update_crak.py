@@ -117,7 +117,7 @@ for holding in holdings:
         unique[ticker] = holding
 
 holdings = list(unique.values())
-}
+
 
 with open(DATA, "w", encoding="utf-8") as f:
     json.dump(result, f, indent=2)
