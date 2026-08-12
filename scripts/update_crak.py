@@ -66,28 +66,37 @@ lines = [
     for line in soup.get_text("\n", strip=True).splitlines()
     if clean_text(line)
 ]
-print("Searching for holdings headers...")
-for i in range(len(lines) - 3):
-    headers = [x.lower() for x in lines[i:i + 4]]
-    print(f"Candidate headers at line {i}: {headers}")
-    if headers == [...]:
-        start = i + 4
-        break
 
 start = None
 
+# Search for the holdings table headers with flexible matching
 for i in range(len(lines) - 3):
     headers = [x.lower() for x in lines[i:i + 4]]
-    if headers == [
+    # Try multiple header variations
+    if (headers == [
         "ticker",
         "holding name",
         "% of net assets",
         "market value (us$)",
-    ]:
+    ] or headers == [
+        "ticker",
+        "company name",
+        "weight %",
+        "value",
+    ] or headers == [
+        "symbol",
+        "company",
+        "% weighting",
+        "market value",
+    ]):
         start = i + 4
+        print(f"Found holdings table at line {i}")
         break
 
 if start is None:
+    print("DEBUG: First 50 lines of content:")
+    for idx, line in enumerate(lines[:50]):
+        print(f"  {idx}: {line}")
     raise RuntimeError("Could not find CRAK holdings section on the VanEck page.")
 
 row_pattern = re.compile(
@@ -152,12 +161,6 @@ for holding in holdings:
 
 holdings = list(unique.values())
 
-
-with open(DATA, "w", encoding="utf-8") as f:
-    json.dump(result, f, indent=2)
-
-print(f"Saved {len(holdings)} CRAK holdings to {DATA}")
-
 today = datetime.date.today().isoformat()
 
 result = {
@@ -167,13 +170,8 @@ result = {
     "holdings": holdings,
 }
 
-
 with open(DATA, "w", encoding="utf-8") as f:
     json.dump(result, f, indent=2)
 
-
-print(
-    f"Updated CRAK holdings: {len(holdings)} holdings"
-)
-
+print(f"Updated CRAK holdings: {len(holdings)} holdings")
 print(f"Saved to: {DATA}")
