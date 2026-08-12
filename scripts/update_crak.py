@@ -68,7 +68,7 @@ for table in soup.find_all("table"):
     rows = table.find_all("tr")
 
     if not rows:
-    continue
+        continue
 
     header_cells = rows[0].find_all(["th", "td"])
 
