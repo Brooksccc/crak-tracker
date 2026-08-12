@@ -81,10 +81,7 @@ for table in soup.find_all("table"):
 
     print("Found table:", header_text[:200])
 
-    # We need the actual CRAK holdings table.
-    if "ticker" not in header_text:
-        continue
-
+    # Look for CRAK holdings table
     if "holding name" not in header_text:
         continue
 
