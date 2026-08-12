@@ -63,22 +63,24 @@ holdings = []
 
 print("Searching for the CRAK holdings table...")
 
-for table in soup.find_all("table"):
+tables = soup.find_all("table")
+
+for table in tables:
     rows = table.find_all("tr")
     if not rows:
         continue
 
-    header_cells = rows[0].find_all(["th", "td"])
     headers = [
         clean_text(cell.get_text(" ", strip=True)).lower()
-        for cell in header_cells
+        for cell in rows[0].find_all(["th", "td"])
     ]
 
     header_text = " ".join(headers)
-    print("Found table:", header_text[:200])
 
     if "ticker" not in header_text or "holding name" not in header_text:
         continue
+
+    print("Found holdings table:", header_text[:200])
 
     ticker_index = next(
         (i for i, h in enumerate(headers) if "ticker" in h),
@@ -109,13 +111,8 @@ for table in soup.find_all("table"):
         if len(cells) <= max(ticker_index, name_index):
             continue
 
-        ticker = clean_text(
-            cells[ticker_index].get_text(" ", strip=True)
-        )
-
-        name = clean_text(
-            cells[name_index].get_text(" ", strip=True)
-        )
+        ticker = clean_text(cells[ticker_index].get_text(" ", strip=True))
+        name = clean_text(cells[name_index].get_text(" ", strip=True))
 
         if not ticker or not name:
             continue
@@ -155,7 +152,6 @@ if not holdings:
         "Could not find CRAK holdings table on the VanEck page."
     )
 
-
 # Remove duplicate tickers while preserving order.
 unique = {}
 
@@ -167,6 +163,18 @@ for holding in holdings:
 
 holdings = list(unique.values())
 
+today = datetime.date.today().isoformat()
+
+result = {
+    "ticker": "CRAK",
+    "date": today,
+    "holdings": holdings,
+}
+
+with open(DATA, "w", encoding="utf-8") as f:
+    json.dump(result, f, indent=2)
+
+print(f"Saved {len(holdings)} CRAK holdings to {DATA}")
 
 today = datetime.date.today().isoformat()
 
